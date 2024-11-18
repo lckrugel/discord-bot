@@ -107,3 +107,21 @@ func CreateIdentifyPayload(bot bot.Bot) ([]byte, error) {
 	}
 	return idenfityPayloadJSON, nil
 }
+
+func CreateResumePayload(bot bot.Bot, session_id string, sequence int) ([]byte, error) {
+	resumeData := map[string]any{
+		"token":      bot.GetSecretKey(),
+		"session_id": session_id,
+		"seq":        sequence,
+	}
+
+	resumePayload := GatewayEventPayload{
+		Operation: Resume,
+		Data:      resumeData,
+	}
+	resumePayloadJSON, err := json.Marshal(resumePayload)
+	if err != nil {
+		return nil, err
+	}
+	return resumePayloadJSON, nil
+}
