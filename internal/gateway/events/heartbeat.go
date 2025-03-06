@@ -32,13 +32,19 @@ func (e HeartbeatEvent) PrepareToSend() ([]byte, error) {
 }
 
 func (e *HeartbeatEvent) DecodeData(msg []byte) (ReceivableEvent, error) {
-	var lastSeq float64
-	err := json.Unmarshal(msg, &lastSeq)
+	var event HeartbeatEvent
+	err := json.Unmarshal(msg, &event)
 	if err != nil {
-		errMsg := "error decoding Heartbeat event: " + err.Error()
+		errMsg := "error decoding HeartbeatEvent: " + err.Error()
 		return nil, errors.New(errMsg)
 	}
-	e.LastSequence = lastSeq
+
+	if event.Operation != Heartbeat {
+		errMsg := "unexpected event received: expected Heartbeat, got " + event.Operation.String()
+		return nil, errors.New(errMsg)
+	}
+
+	e = &event
 	return e, nil
 }
 
@@ -50,6 +56,19 @@ func NewHeartbeatAckEvent() *HeartbeatAckEvent {
 	}
 }
 
-func (e HeartbeatAckEvent) DecodeData(msg []byte) (ReceivableEvent, error) {
+func (e *HeartbeatAckEvent) DecodeData(msg []byte) (ReceivableEvent, error) {
+	var event HeartbeatAckEvent
+	err := json.Unmarshal(msg, &event)
+	if err != nil {
+		errMsg := "error decoding HeartbeatACK event: " + err.Error()
+		return nil, errors.New(errMsg)
+	}
+
+	if event.Operation != Heartbeat_ACK {
+		errMsg := "unexpected event received: expected Heartbeat_ACK, got " + event.Operation.String()
+		return nil, errors.New(errMsg)
+	}
+
+	e = &event
 	return e, nil
 }

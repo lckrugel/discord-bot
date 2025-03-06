@@ -19,12 +19,18 @@ func NewInvalidSessionEvent(resumable bool) InvalidSessionEvent {
 }
 
 func (e *InvalidSessionEvent) DecodeData(data []byte) (ReceivableEvent, error) {
-	var resumable bool
-	err := json.Unmarshal(data, &resumable)
+	var event InvalidSessionEvent
+	err := json.Unmarshal(data, &event)
 	if err != nil {
 		errMsg := "error decoding InvalidSession event: " + err.Error()
 		return nil, errors.New(errMsg)
 	}
-	e.Resumable = resumable
+
+	if event.Operation != Invalid_Session {
+		errMsg := "unexpected event received: expected Invalid_Session, got " + event.Operation.String()
+		return nil, errors.New(errMsg)
+	}
+
+	e = &event
 	return e, nil
 }

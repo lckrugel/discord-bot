@@ -30,12 +30,23 @@ func NewReadyEvent() *ReadyEvent {
 }
 
 func (e *ReadyEvent) DecodeData(msg []byte) (ReceivableEvent, error) {
-	var payload ReadyPayload
-	err := json.Unmarshal(msg, &payload)
+	var event ReadyEvent
+	err := json.Unmarshal(msg, &event)
 	if err != nil {
-		errMsg := "error decoding Ready payload: " + err.Error()
+		errMsg := "error decoding Ready event: " + err.Error()
 		return nil, errors.New(errMsg)
 	}
-	e.Data = payload
+
+	if event.Operation != Dispatch {
+		errMsg := "unexpected event received: expected Dispatch, got " + event.Operation.String()
+		return nil, errors.New(errMsg)
+	}
+
+	if *event.Type != "Ready" {
+		errMsg := "unexpected event type received: expected Ready, got " + *event.Type
+		return nil, errors.New(errMsg)
+	}
+
+	e = &event
 	return e, nil
 }

@@ -19,12 +19,17 @@ func NewHelloEvent() *HelloEvent {
 }
 
 func (e *HelloEvent) DecodeData(msg []byte) (ReceivableEvent, error) {
-	var interval float64
-	err := json.Unmarshal(msg, &interval)
+	var event HelloEvent
+	err := json.Unmarshal(msg, &event)
 	if err != nil {
 		errMsg := "error decoding Hello event: " + err.Error()
 		return nil, errors.New(errMsg)
 	}
-	e.Heartbeat_Interval = interval
+
+	if event.Operation != Hello {
+		errMsg := "unexpected event received: expected Hello, got " + event.Operation.String()
+		return nil, errors.New(errMsg)
+	}
+	e = &event
 	return e, nil
 }
