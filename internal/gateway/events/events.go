@@ -45,13 +45,13 @@ func (op OpCode) String() string {
 
 // An event that can be sent over the websocket
 type SendableEvent interface {
-	// Serializes the event to a byte slice to be sent over the websocket
-	Prepare() ([]byte, error)
+	// Serializes the event to a json byte slice to be sent over the websocket
+	PrepareToSend() ([]byte, error)
 }
 
 // An event that can be received over the websocket
 type ReceivableEvent interface {
-	// Decodes the event from a byte slice received over the websocket
+	// Decodes the event data from a json byte slice received over the websocket
 	DecodeData([]byte) (ReceivableEvent, error)
 }
 
@@ -72,7 +72,7 @@ func NewEvent(msg []byte) (*Event, error) {
 }
 
 func SendEvent(conn *websocket.Conn, e SendableEvent) error {
-	msg, err := e.Prepare()
+	msg, err := e.PrepareToSend()
 	if err != nil {
 		return err
 	}

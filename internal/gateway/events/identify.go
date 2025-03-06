@@ -33,7 +33,7 @@ func NewIdentifyEvent(payload IdentifyPayload) *IdentifyEvent {
 	}
 }
 
-func (e IdentifyEvent) Prepare() ([]byte, error) {
+func (e IdentifyEvent) PrepareToSend() ([]byte, error) {
 	b, err := json.Marshal(e)
 	if err != nil {
 		errMsg := "error preparing Identify event: " + err.Error()
