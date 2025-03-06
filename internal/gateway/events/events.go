@@ -16,7 +16,7 @@ const (
 	Presence_Update                  = 3
 	Voice_State_Update               = 4
 	Resume                           = 6
-	Reconect                         = 7
+	Reconnect                        = 7
 	Request_Guild_Members            = 8
 	Invalid_Session                  = 9
 	Hello                            = 10
@@ -31,7 +31,7 @@ var operationName = map[OpCode]string{
 	Presence_Update:           "presence_update",
 	Voice_State_Update:        "voice_state_update",
 	Resume:                    "resume",
-	Reconect:                  "reconect",
+	Reconnect:                 "reconect",
 	Request_Guild_Members:     "request_guild_members",
 	Invalid_Session:           "invalid_session",
 	Hello:                     "hello",
