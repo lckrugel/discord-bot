@@ -7,31 +7,24 @@ import (
 
 type HelloEvent struct {
 	Event
-	Data HelloPayload `json:"d"`
-}
-
-type HelloPayload struct {
-	Interval float64 `json:"heartbeat_interval"`
+	Heartbeat_Interval float64 `json:"d"`
 }
 
 func NewHelloEvent() *HelloEvent {
 	return &HelloEvent{
 		Event: Event{
 			Operation: Hello,
-			Sequence:  nil,
-			Type:      nil,
 		},
-		Data: HelloPayload{},
 	}
 }
 
 func (e *HelloEvent) DecodeData(msg []byte) (ReceivableEvent, error) {
-	var payload HelloPayload
-	err := json.Unmarshal(msg, &payload)
+	var interval float64
+	err := json.Unmarshal(msg, &interval)
 	if err != nil {
 		errMsg := "error decoding Hello event: " + err.Error()
 		return nil, errors.New(errMsg)
 	}
-	e.Data = payload
+	e.Heartbeat_Interval = interval
 	return e, nil
 }

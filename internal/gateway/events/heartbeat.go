@@ -7,7 +7,7 @@ import (
 
 type HeartbeatEvent struct {
 	Event
-	Data float64 `json:"d"`
+	LastSequence float64 `json:"d"`
 }
 
 type HeartbeatAckEvent struct {
@@ -18,10 +18,7 @@ func NewHeartbeatEvent() *HeartbeatEvent {
 	return &HeartbeatEvent{
 		Event: Event{
 			Operation: Heartbeat,
-			Sequence:  nil,
-			Type:      nil,
 		},
-		Data: 0,
 	}
 }
 
@@ -35,13 +32,13 @@ func (e HeartbeatEvent) PrepareToSend() ([]byte, error) {
 }
 
 func (e *HeartbeatEvent) DecodeData(msg []byte) (ReceivableEvent, error) {
-	var payload float64
-	err := json.Unmarshal(msg, &payload)
+	var lastSeq float64
+	err := json.Unmarshal(msg, &lastSeq)
 	if err != nil {
 		errMsg := "error decoding Heartbeat event: " + err.Error()
 		return nil, errors.New(errMsg)
 	}
-	e.Data = payload
+	e.LastSequence = lastSeq
 	return e, nil
 }
 
@@ -49,8 +46,6 @@ func NewHeartbeatAckEvent() *HeartbeatAckEvent {
 	return &HeartbeatAckEvent{
 		Event: Event{
 			Operation: Heartbeat_ACK,
-			Sequence:  nil,
-			Type:      nil,
 		},
 	}
 }
