@@ -7,7 +7,7 @@ import (
 
 type ReadyEvent struct {
 	Event
-	Data ReadyPayload `json:"d"`
+	Data ReadyPayload
 }
 
 type ReadyPayload struct {
@@ -29,24 +29,25 @@ func NewReadyEvent() *ReadyEvent {
 	}
 }
 
-func (e *ReadyEvent) DecodeData(msg []byte) (ReceivableEvent, error) {
-	var event ReadyEvent
-	err := json.Unmarshal(msg, &event)
+func (e *ReadyEvent) DecodeData(gen_event Event) error {
+	if gen_event.Operation != Dispatch {
+		errMsg := "unexpected event received: expected Dispatch, got " + gen_event.Operation.String()
+		return errors.New(errMsg)
+	}
+
+	if *gen_event.Type != "Ready" {
+		errMsg := "unexpected event type received: expected Ready, got " + *gen_event.Type
+		return errors.New(errMsg)
+	}
+
+	var payload ReadyPayload
+	err := json.Unmarshal(gen_event.RawData, &payload)
 	if err != nil {
 		errMsg := "error decoding Ready event: " + err.Error()
-		return nil, errors.New(errMsg)
+		return errors.New(errMsg)
 	}
 
-	if event.Operation != Dispatch {
-		errMsg := "unexpected event received: expected Dispatch, got " + event.Operation.String()
-		return nil, errors.New(errMsg)
-	}
-
-	if *event.Type != "Ready" {
-		errMsg := "unexpected event type received: expected Ready, got " + *event.Type
-		return nil, errors.New(errMsg)
-	}
-
-	e = &event
-	return e, nil
+	e.Event = gen_event
+	e.Data = payload
+	return nil
 }

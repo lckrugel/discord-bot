@@ -7,7 +7,7 @@ import (
 
 type InvalidSessionEvent struct {
 	Event
-	Resumable bool `json:"d"`
+	Resumable bool
 }
 
 func NewInvalidSessionEvent(resumable bool) InvalidSessionEvent {
@@ -18,19 +18,22 @@ func NewInvalidSessionEvent(resumable bool) InvalidSessionEvent {
 	}
 }
 
-func (e *InvalidSessionEvent) DecodeData(data []byte) (ReceivableEvent, error) {
-	var event InvalidSessionEvent
-	err := json.Unmarshal(data, &event)
+func (e *InvalidSessionEvent) DecodeData(gen_event Event) error {
+	if gen_event.Operation != Invalid_Session {
+		errMsg := "unexpected event received: expected Invalid_Session, got " + gen_event.Operation.String()
+		return errors.New(errMsg)
+	}
+
+	var payload struct {
+		Resumable bool `json:"d"`
+	}
+	err := json.Unmarshal(gen_event.RawData, &payload)
 	if err != nil {
 		errMsg := "error decoding InvalidSession event: " + err.Error()
-		return nil, errors.New(errMsg)
+		return errors.New(errMsg)
 	}
 
-	if event.Operation != Invalid_Session {
-		errMsg := "unexpected event received: expected Invalid_Session, got " + event.Operation.String()
-		return nil, errors.New(errMsg)
-	}
-
-	e = &event
-	return e, nil
+	e.Event = gen_event
+	e.Resumable = payload.Resumable
+	return nil
 }

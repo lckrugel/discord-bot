@@ -7,7 +7,7 @@ import (
 
 type HeartbeatEvent struct {
 	Event
-	LastSequence float64 `json:"d"`
+	LastSequence float64
 }
 
 type HeartbeatAckEvent struct {
@@ -31,21 +31,24 @@ func (e HeartbeatEvent) PrepareToSend() ([]byte, error) {
 	return msg, nil
 }
 
-func (e *HeartbeatEvent) DecodeData(msg []byte) (ReceivableEvent, error) {
-	var event HeartbeatEvent
-	err := json.Unmarshal(msg, &event)
+func (e *HeartbeatEvent) DecodeData(gen_event Event) error {
+	if gen_event.Operation != Heartbeat {
+		errMsg := "unexpected event received: expected Heartbeat, got " + gen_event.Operation.String()
+		return errors.New(errMsg)
+	}
+
+	var payload struct {
+		LastSequence float64 `json:"d"`
+	}
+	err := json.Unmarshal(gen_event.RawData, &payload)
 	if err != nil {
 		errMsg := "error decoding HeartbeatEvent: " + err.Error()
-		return nil, errors.New(errMsg)
+		return errors.New(errMsg)
 	}
 
-	if event.Operation != Heartbeat {
-		errMsg := "unexpected event received: expected Heartbeat, got " + event.Operation.String()
-		return nil, errors.New(errMsg)
-	}
-
-	e = &event
-	return e, nil
+	e.Event = gen_event
+	e.LastSequence = payload.LastSequence
+	return nil
 }
 
 func NewHeartbeatAckEvent() *HeartbeatAckEvent {
@@ -56,19 +59,12 @@ func NewHeartbeatAckEvent() *HeartbeatAckEvent {
 	}
 }
 
-func (e *HeartbeatAckEvent) DecodeData(msg []byte) (ReceivableEvent, error) {
-	var event HeartbeatAckEvent
-	err := json.Unmarshal(msg, &event)
-	if err != nil {
-		errMsg := "error decoding HeartbeatACK event: " + err.Error()
-		return nil, errors.New(errMsg)
+func (e *HeartbeatAckEvent) DecodeData(gen_event Event) error {
+	if gen_event.Operation != Heartbeat_ACK {
+		errMsg := "unexpected event received: expected Heartbeat_ACK, got " + gen_event.Operation.String()
+		return errors.New(errMsg)
 	}
 
-	if event.Operation != Heartbeat_ACK {
-		errMsg := "unexpected event received: expected Heartbeat_ACK, got " + event.Operation.String()
-		return nil, errors.New(errMsg)
-	}
-
-	e = &event
-	return e, nil
+	e.Event = gen_event
+	return nil
 }

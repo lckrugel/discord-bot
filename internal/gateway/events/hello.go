@@ -7,7 +7,7 @@ import (
 
 type HelloEvent struct {
 	Event
-	Heartbeat_Interval float64 `json:"d"`
+	Heartbeat_Interval float64
 }
 
 func NewHelloEvent() *HelloEvent {
@@ -18,18 +18,21 @@ func NewHelloEvent() *HelloEvent {
 	}
 }
 
-func (e *HelloEvent) DecodeData(msg []byte) (ReceivableEvent, error) {
-	var event HelloEvent
-	err := json.Unmarshal(msg, &event)
+func (e *HelloEvent) DecodeData(gen_event Event) error {
+	if gen_event.Operation != Hello {
+		errMsg := "unexpected event received: expected Hello, got " + gen_event.Operation.String()
+		return errors.New(errMsg)
+	}
+	var payload struct {
+		Heartbeat_Interval float64 `json:"d"`
+	}
+	err := json.Unmarshal(gen_event.RawData, &payload)
 	if err != nil {
 		errMsg := "error decoding Hello event: " + err.Error()
-		return nil, errors.New(errMsg)
+		return errors.New(errMsg)
 	}
 
-	if event.Operation != Hello {
-		errMsg := "unexpected event received: expected Hello, got " + event.Operation.String()
-		return nil, errors.New(errMsg)
-	}
-	e = &event
-	return e, nil
+	e.Event = gen_event
+	e.Heartbeat_Interval = payload.Heartbeat_Interval
+	return nil
 }

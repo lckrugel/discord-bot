@@ -1,7 +1,6 @@
 package events
 
 import (
-	"encoding/json"
 	"errors"
 )
 
@@ -19,19 +18,12 @@ func NewResumedEvent() ResumedEvent {
 	}
 }
 
-func (e *ResumedEvent) DecodeData(data []byte) (ReceivableEvent, error) {
-	var event ResumedEvent
-	err := json.Unmarshal(data, &event)
-	if err != nil {
-		errMsg := "error decoding Resumed event: " + err.Error()
-		return nil, errors.New(errMsg)
+func (e *ResumedEvent) DecodeData(gen_event Event) error {
+	if gen_event.Operation != Reconnect {
+		errMsg := "unexpected event received: expected Resumed, got " + gen_event.Operation.String()
+		return errors.New(errMsg)
 	}
 
-	if event.Operation != Reconnect {
-		errMsg := "unexpected event received: expected Resumed, got " + event.Operation.String()
-		return nil, errors.New(errMsg)
-	}
-
-	e = &event
-	return e, nil
+	e.Event = gen_event
+	return nil
 }

@@ -52,21 +52,23 @@ type SendableEvent interface {
 // An event that can be received over the websocket
 type ReceivableEvent interface {
 	// Decodes the event data from a json byte slice received over the websocket
-	DecodeData([]byte) (ReceivableEvent, error)
+	DecodeData(gen_event Event) error
 }
 
 // An generic event that is sent or received over the websocket
 type Event struct {
-	Operation OpCode  `json:"op"`
-	Sequence  *int    `json:"s"`
-	Type      *string `json:"t"`
+	Operation OpCode          `json:"op"`
+	Sequence  *int            `json:"s"`
+	Type      *string         `json:"t"`
+	RawData   json.RawMessage `json:"d"`
 }
 
 func NewEvent(msg []byte) (*Event, error) {
 	var event Event
 	err := json.Unmarshal(msg, &event)
 	if err != nil {
-		return &Event{}, err
+		errMsg := "error unmarshaling event: " + err.Error()
+		return &Event{}, errors.New(errMsg)
 	}
 	return &event, nil
 }
