@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math/rand"
 	"net/http"
-	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/lckrugel/discord-bot/internal/config"
@@ -21,7 +19,6 @@ type Client struct {
 	conn               *websocket.Conn
 	last_sequence      *int
 	events             chan events.Event
-	stop_signal        chan struct{}
 	heartbeat_interval int
 	session_id         string
 	reconnect_url      string
@@ -55,8 +52,6 @@ func (c *Client) Connect() error {
 		return errors.New(errMsg)
 	}
 
-	// Create a channel to stop goroutines
-	c.stop_signal = make(chan struct{}, 2)
 	// Create a channel to receive events
 	c.events = make(chan events.Event, 1)
 
@@ -69,7 +64,8 @@ func (c *Client) Connect() error {
 	hello_event := events.NewHelloEvent()
 	err = hello_event.DecodeData(event)
 	if err != nil {
-		return err
+		errMsg := fmt.Sprint("error decoding Hello event: ", err)
+		return errors.New(errMsg)
 	}
 	// Set the heartbeat interval from the Hello event
 	c.heartbeat_interval = int(hello_event.Heartbeat_Interval)
@@ -78,8 +74,13 @@ func (c *Client) Connect() error {
 	identify_event := events.NewIdentifyEvent(events.IdentifyPayload{
 		Token:   c.token,
 		Intents: c.intents,
+		Properties: events.IdentifyProperties{
+			Os:      "linux",
+			Browser: "discord-bot",
+			Device:  "discord-bot",
+		},
 	})
-	err = events.SendEvent(*&c.conn, identify_event)
+	err = events.SendEvent(c.conn, identify_event)
 	if err != nil {
 		errMsg := fmt.Sprint("error sending Identify event: ", err)
 		return errors.New(errMsg)
@@ -87,11 +88,18 @@ func (c *Client) Connect() error {
 
 	// Expect to receive a Ready event
 	event = <-c.events
-	if event.Operation != events.Dispatch || *event.Type != "READY" {
+	if event.Operation == events.Invalid_Session {
+		return errors.New("invalid discord session")
+	} else if event.Operation != events.Dispatch || *event.Type != "READY" {
 		return errors.New("didn't receive Ready event")
 	}
+
 	ready_event := events.NewReadyEvent()
 	err = ready_event.DecodeData(event)
+	if err != nil {
+		errMsg := fmt.Sprint("error decoding Ready event: ", err)
+		return errors.New(errMsg)
+	}
 
 	// Pick up the session_id and reconnect_url for future reconnections
 	c.session_id = ready_event.Data.Session_id
@@ -102,19 +110,20 @@ func (c *Client) Connect() error {
 	return nil
 }
 
-func (c *Client) Reconnect() {
+func (c *Client) Reconnect() error {
 	log.Println("Attempting to reconnect...")
 
-	// Para a execução das goroutines e fecha a conexão
+	// Forces the goroutines to stop and closes the connection
 	c.Disconnect()
 
-	// Reinicia a conexão com o gateway usando a url fornecida
+	// Restablishes the connection with the reconnect_url
 	conn, resp, err := websocket.DefaultDialer.Dial(c.reconnect_url, nil)
 	if err != nil {
 		log.Print("error restablishing connection to gateway: ", err)
-		log.Print("restarting connection...")
-		c.Connect()
-		return
+		// log.Print("restarting connection...")
+		// c.Connect()
+		errMsg := fmt.Sprint("error establishing connection to gateway: ", err)
+		return errors.New(errMsg)
 	}
 	c.conn = conn
 
@@ -123,48 +132,51 @@ func (c *Client) Reconnect() {
 		return nil
 	})
 
-	// Espera-se que ocorra a troca de HTTP -> WSS
+	// Check if the connection was successfully upgraded to WSS
 	if resp.StatusCode != 101 {
 		log.Print("failed to switch protocols with status: ", resp.StatusCode)
-		log.Print("restarting connection...")
-		c.Connect()
-		return
+		// log.Print("restarting connection...")
+		// c.Connect()
+		errMsg := fmt.Sprint("error while switching protocols: ", err)
+		return errors.New(errMsg)
 	}
 
-	// Recria o canal para os sinais de parada
-	c.stop_signal = make(chan struct{}, 2)
+	go listener(c) // Start listening for events
 
-	go listener(c) // Recomeça a ouvir os eventos
-	SendResume(*c)
+	resumeEvent := events.NewResumeEvent(events.ResumePayload{
+		Token:     c.token,
+		SessionId: c.session_id,
+		Sequence:  *c.last_sequence,
+	})
+	err = events.SendEvent(c.conn, resumeEvent)
+	if err != nil {
+		errMsg := fmt.Sprint("failed to send resume event: ", err)
+		return errors.New(errMsg)
+	}
 
-	// Checa se foi resumida com sucesso a conexão
+	// Check if the connection was successfully resumed
 	resumedPayload := <-c.events
 	if *resumedPayload.Type != "RESUMED" {
 		log.Print("failed to resume connection")
-		log.Print("restarting connection...")
-		c.Connect()
-		return
+		// log.Print("restarting connection...")
+		// c.Connect()
+		errMsg := fmt.Sprint("failed to resume connection: ", err)
+		return errors.New(errMsg)
 	}
 
-	go handleHeartbeat(c)
+	go handleHeartbeat(c) // Start heartbeat exchange
+
+	return nil
 }
 
 func (c *Client) Disconnect() {
 	log.Println("Disconnecting...")
 
-	c.sendStopSignal()
 	if c.conn != nil {
 		c.conn.Close()
 		c.conn = nil
 	}
 	close(c.events)
-}
-
-func (client *Client) sendStopSignal() {
-	if client.stop_signal != nil {
-		close(client.stop_signal)
-		client.stop_signal = nil
-	}
 }
 
 func NewClient(cfg config.Config) *Client {
@@ -176,20 +188,17 @@ func NewClient(cfg config.Config) *Client {
 
 /* Get the websocket URL from the Discord API */
 func getWebsocketURL(api_key string) (string, error) {
-	// Forma o request
 	req, err := http.NewRequest("GET", "https://discord.com/api/v9/gateway/bot", nil)
 	if err != nil {
 		return "", err
 	}
 	req.Header.Add("Authorization", "Bot "+api_key)
 
-	// Envia o request
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", err
 	}
 
-	// Lê a resposta
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
@@ -199,14 +208,12 @@ func getWebsocketURL(api_key string) (string, error) {
 		return "", errors.New(string(bodyBytes))
 	}
 
-	// Transforma o corpo em um map
 	var bodyMap map[string]any
 	err = json.Unmarshal(bodyBytes, &bodyMap)
 	if err != nil {
 		return "", err
 	}
 
-	// Busca no corpo a URL
 	url, ok := bodyMap["url"].(string)
 	if !ok {
 		return "", errors.New("invalid url")
@@ -214,59 +221,9 @@ func getWebsocketURL(api_key string) (string, error) {
 	return url, nil
 }
 
-/* Lida com o envio periódico dos "heartbeats" para manter a conexão */
-func handleHeartbeat(client *Client) error {
-	// Envia o primeiro heartbeat
-	log.Println("[heartbeat] start sending heartbeats...")
-	jitter := rand.Float64() // Intervalo aleatorio antes de começar a enviar heartbeat
-	intervalDuration := time.Duration(time.Millisecond * time.Duration(client.heartbeat_interval))
-
-	time.Sleep(time.Duration(intervalDuration.Milliseconds() * int64(jitter)))
-	client.last_sequence = nil
-	lastHeartbeartSentAt, err := SendHeartbeat(*client)
-	if err != nil {
-		errMsg := fmt.Sprint("[heartbeat] failed to send heartbeat: ", err)
-		return errors.New(errMsg)
-	}
-
-	// Loop de envio de heartbeats
-	for lastEvent := range client.events {
-		select {
-		case <-client.stop_signal:
-			return nil
-
-		default:
-			if time.Since(lastHeartbeartSentAt) > intervalDuration {
-				client.Reconnect()
-			}
-			client.last_sequence = lastEvent.Sequence
-
-			switch lastEvent.Operation {
-			case Heartbeat_ACK:
-				log.Print("[heartbeat] received heartbeat ack")
-				time.Sleep(intervalDuration)
-				lastHeartbeartSentAt, err = SendHeartbeat(*client)
-				if err != nil {
-					errMsg := fmt.Sprint("[heartbeat] failed to send heartbeat: ", err)
-					return errors.New(errMsg)
-				}
-
-			case Heartbeat:
-				log.Print("[heartbeat] received heartbeat")
-				lastHeartbeartSentAt, err = SendHeartbeat(*client)
-				if err != nil {
-					errMsg := fmt.Sprint("[heartbeat] failed to send heartbeat: ", err)
-					return errors.New(errMsg)
-				}
-			}
-		}
-	}
-	return nil
-}
-
 func handleCloseCode(code int, text string, c Client) {
 	log.Printf("webSocket closed with code: %d, reason: %s", code, text)
-	// Se for possível, tenta a reconexão, se não cria uma nova conexão
+	// If possible, try to resume the connection
 	if code > 4010 {
 		c.Connect()
 	} else {

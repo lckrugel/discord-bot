@@ -2,45 +2,35 @@ package gateway
 
 import (
 	"log"
+	"strings"
 
-	"github.com/gorilla/websocket"
+	"github.com/lckrugel/discord-bot/internal/gateway/events"
 )
 
-/* Escuta por eventos na conexão e os envia nos canais */
+/* Listen for events on the gateway connection and send them in a channel */
 func listener(client *Client) {
 	log.Println("[listener] starting listener...")
 	for {
-		select {
-		case <-client.stopSignal:
-			log.Println("[listener] stopping goroutine...")
-			return
-
-		default:
-		}
-
 		_, msg, err := client.conn.ReadMessage()
 		if err != nil {
-			if closeErr, ok := err.(*websocket.CloseError); ok {
-				log.Println("[listener] ws connection closed: ", closeErr)
-				return // Apenas retorna do listener encerrando a goroutine, a reconexão será tentada pelo CloseHandler
-			} else {
-				log.Fatalf("[listener] unexpected error reading gateway message: %v", err)
+			if strings.Contains(err.Error(), "use of closed network connection") {
+				log.Println("[listener] connection closed")
+				return
 			}
+			log.Printf("[listener] unexpected error reading gateway message: %v", err)
+			client.Reconnect()
+			return
 		}
 
-		msgPayload, err := unmarshalPayload(msg)
+		msgPayload, err := events.NewEvent(msg)
 		if err != nil {
 			log.Fatalf("[listener] error parsing gateway message: %v", err)
 		}
 
-		if msgPayload.Operation != Dispatch {
-			client.connectionEvents <- msgPayload
-		} else if *msgPayload.Type == "READY" || *msgPayload.Type == "RESUMED" {
-			dispatch_router(msgPayload)
-			client.connectionEvents <- msgPayload
-		} else {
-			dispatch_router(msgPayload)
+		if msgPayload.Sequence != nil {
+			client.last_sequence = msgPayload.Sequence
 		}
-		client.last_sequence = msgPayload.Sequence
+
+		client.events <- *msgPayload
 	}
 }
