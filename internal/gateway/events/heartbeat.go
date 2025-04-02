@@ -23,7 +23,7 @@ func NewHeartbeatEvent(sequence *int) *HeartbeatEvent {
 	}
 }
 
-func (e HeartbeatEvent) PrepareToSend() ([]byte, error) {
+func (e HeartbeatEvent) prepareToSend() ([]byte, error) {
 	msg, err := json.Marshal(e)
 	if err != nil {
 		errMsg := "error preparing Heartbeat event: " + err.Error()

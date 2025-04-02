@@ -25,7 +25,7 @@ func NewResumeEvent(payload ResumePayload) ResumeEvent {
 	}
 }
 
-func (e ResumeEvent) PrepareToSend() ([]byte, error) {
+func (e ResumeEvent) prepareToSend() ([]byte, error) {
 	json, err := json.Marshal(e)
 	if err != nil {
 		errMsg := "error preparing Resume event: " + err.Error()

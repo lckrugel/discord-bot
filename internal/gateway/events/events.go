@@ -46,7 +46,7 @@ func (op OpCode) String() string {
 // An event that can be sent over the websocket
 type SendableEvent interface {
 	// Serializes the event to a json byte slice to be sent over the websocket
-	PrepareToSend() ([]byte, error)
+	prepareToSend() ([]byte, error)
 }
 
 // An event that can be received over the websocket
@@ -74,7 +74,7 @@ func NewEvent(msg []byte) (*Event, error) {
 }
 
 func SendEvent(conn *websocket.Conn, e SendableEvent) error {
-	msg, err := e.PrepareToSend()
+	msg, err := e.prepareToSend()
 	if err != nil {
 		return err
 	}
