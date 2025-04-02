@@ -11,15 +11,15 @@ type IdentifyEvent struct {
 }
 
 type IdentifyPayload struct {
-	Token      string
-	Properties IdentifyProperties
-	Intents    uint64
+	Token      string             `json:"token"`
+	Properties IdentifyProperties `json:"properties"`
+	Intents    uint64             `json:"intents"`
 }
 
 type IdentifyProperties struct {
-	Os      string
-	Browser string
-	Device  string
+	Os      string `json:"os"`
+	Browser string `json:"browser"`
+	Device  string `json:"device"`
 }
 
 func NewIdentifyEvent(payload IdentifyPayload) *IdentifyEvent {

@@ -7,18 +7,19 @@ import (
 
 type HeartbeatEvent struct {
 	Event
-	LastSequence float64
+	LastSequence *int
 }
 
 type HeartbeatAckEvent struct {
 	Event
 }
 
-func NewHeartbeatEvent() *HeartbeatEvent {
+func NewHeartbeatEvent(sequence *int) *HeartbeatEvent {
 	return &HeartbeatEvent{
 		Event: Event{
 			Operation: Heartbeat,
 		},
+		LastSequence: sequence,
 	}
 }
 
@@ -46,8 +47,10 @@ func (e *HeartbeatEvent) DecodeData(gen_event Event) error {
 		return errors.New(errMsg)
 	}
 
+	sqcInt := int(payload.LastSequence)
+
 	e.Event = gen_event
-	e.LastSequence = payload.LastSequence
+	e.LastSequence = &sqcInt
 	return nil
 }
 

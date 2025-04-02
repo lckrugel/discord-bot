@@ -24,7 +24,7 @@ func (e *HelloEvent) DecodeData(gen_event Event) error {
 		return errors.New(errMsg)
 	}
 	var payload struct {
-		Heartbeat_Interval float64 `json:"d"`
+		Heartbeat_Interval float64 `json:"heartbeat_interval"`
 	}
 	err := json.Unmarshal(gen_event.RawData, &payload)
 	if err != nil {

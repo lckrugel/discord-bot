@@ -35,8 +35,8 @@ func (e *ReadyEvent) DecodeData(gen_event Event) error {
 		return errors.New(errMsg)
 	}
 
-	if *gen_event.Type != "Ready" {
-		errMsg := "unexpected event type received: expected Ready, got " + *gen_event.Type
+	if *gen_event.Type != "READY" {
+		errMsg := "unexpected event type received: expected READY, got " + *gen_event.Type
 		return errors.New(errMsg)
 	}
 
