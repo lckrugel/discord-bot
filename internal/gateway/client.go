@@ -24,6 +24,8 @@ type Client struct {
 	session_id         string
 	reconnect_url      string
 	wg                 sync.WaitGroup
+	reconnect_signal   chan struct{}
+	shutdown_signal    chan struct{}
 }
 
 /* Establishes connection to the Discord gateway */
@@ -56,6 +58,26 @@ func (c *Client) Connect() error {
 
 	// Create a channel to receive events
 	c.events = make(chan events.Event, 1)
+
+	// Start goroutine to handle reconnections
+	c.reconnect_signal = make(chan struct{}, 1)
+	c.shutdown_signal = make(chan struct{}, 1)
+	go func() {
+		for {
+			select {
+			case <-c.reconnect_signal:
+				log.Println("Received reconnect signal")
+				err := c.Reconnect()
+				if err != nil {
+					log.Print("error reconnecting: ", err)
+					c.RestartConnection()
+				}
+			case <-c.shutdown_signal:
+				log.Println("Received shutdown signal")
+				return
+			}
+		}
+	}()
 
 	c.wg.Add(1)
 	// Start listening for events
@@ -131,10 +153,7 @@ func (c *Client) Reconnect() error {
 	// Restablishes the connection with the reconnect_url
 	conn, resp, err := websocket.DefaultDialer.Dial(c.reconnect_url, nil)
 	if err != nil {
-		log.Print("error restablishing connection to gateway: ", err)
-		// log.Print("restarting connection...")
-		// c.Connect()
-		errMsg := fmt.Sprint("error establishing connection to gateway: ", err)
+		errMsg := fmt.Sprint("error restablishing connection to gateway: ", err)
 		return errors.New(errMsg)
 	}
 	c.conn = conn
@@ -146,10 +165,7 @@ func (c *Client) Reconnect() error {
 
 	// Check if the connection was successfully upgraded to WSS
 	if resp.StatusCode != 101 {
-		log.Print("failed to switch protocols with status: ", resp.StatusCode)
-		// log.Print("restarting connection...")
-		// c.Connect()
-		errMsg := fmt.Sprint("error while switching protocols: ", err)
+		errMsg := fmt.Sprint("error while switching protocols with status: ", resp.StatusCode)
 		return errors.New(errMsg)
 	}
 
@@ -174,10 +190,7 @@ func (c *Client) Reconnect() error {
 	// Check if the connection was successfully resumed
 	resumedPayload := <-c.events
 	if *resumedPayload.Type != "RESUMED" {
-		log.Print("failed to resume connection")
-		// log.Print("restarting connection...")
-		// c.Connect()
-		errMsg := fmt.Sprint("failed to resume connection: ", err)
+		errMsg := fmt.Sprint("connection not resumed: ", err)
 		return errors.New(errMsg)
 	}
 
@@ -197,8 +210,8 @@ func (c *Client) Disconnect() {
 	if c.conn != nil {
 		c.conn.Close()
 	}
-	c.wg.Wait()
 	close(c.events)
+	c.wg.Wait()
 }
 
 func NewClient(cfg config.Config) *Client {
@@ -206,6 +219,23 @@ func NewClient(cfg config.Config) *Client {
 		token:   cfg.GetSecretKey(),
 		intents: cfg.GetIntents(),
 	}
+}
+
+func (c *Client) RestartConnection() {
+	log.Println("Restarting connection...")
+	close(c.shutdown_signal)
+	c.Disconnect()
+	err := c.Connect()
+	if err != nil {
+		log.Fatal("error restarting connection: ", err)
+	}
+}
+
+func (c *Client) Shutdown() {
+	log.Println("Shutting down...")
+	c.Disconnect()
+	close(c.shutdown_signal)
+	log.Println("Shutdown complete.")
 }
 
 /* Get the websocket URL from the Discord API */
@@ -247,8 +277,8 @@ func handleCloseCode(code int, text string, c *Client) {
 	log.Printf("webSocket closed with code: %d, reason: %s", code, text)
 	// If possible, try to resume the connection
 	if code > 4010 {
-		c.Connect()
+		c.RestartConnection()
 	} else {
-		c.Reconnect()
+		c.reconnect_signal <- struct{}{}
 	}
 }

@@ -36,8 +36,8 @@ func main() {
 
 		// Wait for stop signal.
 		<-stopChan
-		bot.Disconnect()
-		log.Println("Disconnected")
+		bot.Shutdown()
+		log.Println("Bot stopped")
 	}()
 
 	// Wait for OS signal.

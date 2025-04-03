@@ -1,6 +1,8 @@
 package gateway
 
 import (
+	"errors"
+	"fmt"
 	"log"
 	"math/rand/v2"
 	"time"
@@ -9,50 +11,50 @@ import (
 )
 
 /* Handle sending and receiving periodic heartbeat exchange */
-func handleHeartbeat(client *Client) {
+func handleHeartbeat(c *Client) error {
 	// Send first heartbeat with a random jitter
 	log.Println("[heartbeat] start sending heartbeats...")
 	jitter := rand.Float64()
-	interval := time.Duration(time.Millisecond * time.Duration(client.heartbeat_interval))
+	interval := time.Duration(time.Millisecond * time.Duration(c.heartbeat_interval))
 
 	time.Sleep(time.Duration(interval.Milliseconds() * int64(jitter)))
 
-	client.last_sequence = nil
-	heartbeat := events.NewHeartbeatEvent(client.last_sequence)
-	err := events.SendEvent(client.conn, heartbeat)
+	c.last_sequence = nil
+	heartbeat := events.NewHeartbeatEvent(c.last_sequence)
+	err := events.SendEvent(c.conn, heartbeat)
 	if err != nil {
-		log.Print("[heartbeat] failed to send heartbeat: ", err)
-		return
+		errMsg := fmt.Sprint("[heartbeat] failed to send first heartbeat: ", err)
+		return errors.New(errMsg)
 	}
 	last_sent_at := time.Now()
 
-	for lastEvent := range client.events {
+	for lastEvent := range c.events {
 		if time.Since(last_sent_at) > interval {
-			client.Reconnect()
+			c.reconnect_signal <- struct{}{}
+			return errors.New("[heartbeat] heartbeat timeout")
 		}
-		client.last_sequence = lastEvent.Sequence
+		c.last_sequence = lastEvent.Sequence
 
 		switch lastEvent.Operation {
 		case events.Heartbeat_ACK:
 			time.Sleep(interval)
 
-			heartbeat = events.NewHeartbeatEvent(client.last_sequence)
-			err = events.SendEvent(client.conn, heartbeat)
+			heartbeat = events.NewHeartbeatEvent(c.last_sequence)
+			err = events.SendEvent(c.conn, heartbeat)
 			last_sent_at = time.Now()
 			if err != nil {
 				log.Print("[heartbeat] failed to send heartbeat: ", err)
-				return
 			}
 
 		case events.Heartbeat:
 			log.Print("[heartbeat] received heartbeat, responding immediately")
-			heartbeat = events.NewHeartbeatEvent(client.last_sequence)
-			err = events.SendEvent(client.conn, heartbeat)
+			heartbeat = events.NewHeartbeatEvent(c.last_sequence)
+			err = events.SendEvent(c.conn, heartbeat)
 			last_sent_at = time.Now()
 			if err != nil {
 				log.Print("[heartbeat] failed to send heartbeat: ", err)
-				return
 			}
 		}
 	}
+	return nil
 }

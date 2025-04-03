@@ -1,6 +1,8 @@
 package gateway
 
 import (
+	"errors"
+	"fmt"
 	"log"
 	"strings"
 
@@ -8,29 +10,35 @@ import (
 )
 
 /* Listen for events on the gateway connection and send them in a channel */
-func listener(client *Client) {
+func listener(c *Client) error {
 	log.Println("[listener] starting listener...")
 	for {
-		_, msg, err := client.conn.ReadMessage()
+		_, msg, err := c.conn.ReadMessage()
 		if err != nil {
 			if strings.Contains(err.Error(), "use of closed network connection") {
-				log.Println("[listener] connection closed")
-				return
+				log.Print("[listener] connection closed")
+				return nil
 			}
-			log.Printf("[listener] unexpected error reading gateway message: %v", err)
-			client.Reconnect()
-			return
+			errMsg := fmt.Sprintf("[listener] unexpected error reading gateway message: %v", err)
+			c.reconnect_signal <- struct{}{}
+			return errors.New(errMsg)
 		}
 
 		event, err := events.NewEvent(msg)
 		if err != nil {
-			log.Fatalf("[listener] error parsing gateway message: %v", err)
+			log.Printf("[listener] error parsing gateway message: %v", err)
+			continue
 		}
 
 		if event.Sequence != nil {
-			client.last_sequence = event.Sequence
+			c.last_sequence = event.Sequence
 		}
 
-		client.events <- *event
+		if event.Operation == events.Reconnect {
+			c.reconnect_signal <- struct{}{}
+			return errors.New("[listener] received reconnect event")
+		}
+
+		c.events <- *event
 	}
 }
