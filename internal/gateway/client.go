@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sync"
 
 	"github.com/gorilla/websocket"
 	"github.com/lckrugel/discord-bot/internal/config"
@@ -22,6 +23,7 @@ type Client struct {
 	heartbeat_interval int
 	session_id         string
 	reconnect_url      string
+	wg                 sync.WaitGroup
 }
 
 /* Establishes connection to the Discord gateway */
@@ -42,7 +44,7 @@ func (c *Client) Connect() error {
 	c.conn = conn
 
 	conn.SetCloseHandler(func(code int, text string) error {
-		handleCloseCode(code, text, *c)
+		handleCloseCode(code, text, c)
 		return nil
 	})
 
@@ -55,7 +57,12 @@ func (c *Client) Connect() error {
 	// Create a channel to receive events
 	c.events = make(chan events.Event, 1)
 
-	go listener(c) // Start listening for events
+	c.wg.Add(1)
+	// Start listening for events
+	go func() {
+		defer c.wg.Done()
+		listener(c)
+	}()
 
 	event := <-c.events
 	if event.Operation != events.Hello {
@@ -105,7 +112,12 @@ func (c *Client) Connect() error {
 	c.session_id = ready_event.Data.Session_id
 	c.reconnect_url = ready_event.Data.Resume_url
 
-	go handleHeartbeat(c) // Start heartbeat exchange
+	// Start heartbeat exchange
+	c.wg.Add(1)
+	go func() {
+		defer c.wg.Done()
+		handleHeartbeat(c)
+	}()
 
 	return nil
 }
@@ -128,7 +140,7 @@ func (c *Client) Reconnect() error {
 	c.conn = conn
 
 	conn.SetCloseHandler(func(code int, text string) error {
-		handleCloseCode(code, text, *c)
+		handleCloseCode(code, text, c)
 		return nil
 	})
 
@@ -141,7 +153,12 @@ func (c *Client) Reconnect() error {
 		return errors.New(errMsg)
 	}
 
-	go listener(c) // Start listening for events
+	// Start listening for events
+	c.wg.Add(1)
+	go func() {
+		defer c.wg.Done()
+		listener(c)
+	}()
 
 	resumeEvent := events.NewResumeEvent(events.ResumePayload{
 		Token:     c.token,
@@ -164,7 +181,12 @@ func (c *Client) Reconnect() error {
 		return errors.New(errMsg)
 	}
 
-	go handleHeartbeat(c) // Start heartbeat exchange
+	// Start heartbeat exchange
+	c.wg.Add(1)
+	go func() {
+		defer c.wg.Done()
+		handleHeartbeat(c)
+	}()
 
 	return nil
 }
@@ -174,8 +196,8 @@ func (c *Client) Disconnect() {
 
 	if c.conn != nil {
 		c.conn.Close()
-		c.conn = nil
 	}
+	c.wg.Wait()
 	close(c.events)
 }
 
@@ -221,7 +243,7 @@ func getWebsocketURL(api_key string) (string, error) {
 	return url, nil
 }
 
-func handleCloseCode(code int, text string, c Client) {
+func handleCloseCode(code int, text string, c *Client) {
 	log.Printf("webSocket closed with code: %d, reason: %s", code, text)
 	// If possible, try to resume the connection
 	if code > 4010 {
