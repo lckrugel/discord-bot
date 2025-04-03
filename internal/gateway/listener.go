@@ -22,15 +22,15 @@ func listener(client *Client) {
 			return
 		}
 
-		msgPayload, err := events.NewEvent(msg)
+		event, err := events.NewEvent(msg)
 		if err != nil {
 			log.Fatalf("[listener] error parsing gateway message: %v", err)
 		}
 
-		if msgPayload.Sequence != nil {
-			client.last_sequence = msgPayload.Sequence
+		if event.Sequence != nil {
+			client.last_sequence = event.Sequence
 		}
 
-		client.events <- *msgPayload
+		client.events <- *event
 	}
 }
